@@ -15,8 +15,6 @@ OrderedWorkspaceGroups = List[Tuple[str, List[i3ipc.Con]]]
 
 logger = logger.logger
 
-# import my_logger
-
 GROUP_SECTION_DELIMITER = "."
 
 
@@ -237,11 +235,6 @@ class WorkspaceGroupsController:
         # (group, local_number).
         for workspace in group_to_all_workspaces.get(group, []):
             if ws_names.get_local_workspace_number(workspace) == local_number:
-                # # replace double quotes with single quotes so there are no problems with pango layout
-                # return (
-                #     workspace.name.replace('"', "'"),
-                #     True,
-                # )
                 return (
                     workspace.name,
                     True,

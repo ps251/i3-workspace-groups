@@ -33,7 +33,6 @@ import i3ipc
 
 from i3wsgroups import logger
 
-# import my_logger
 import copy
 
 logger = logger.logger
@@ -198,14 +197,7 @@ def get_section_from_workspace_name(workspace_name, section):
     if start_index == -1 or end_index == -1 or start_index == end_index:
         return ""
     start_index += len(delimiter)
-    return workspace_name[
-        start_index:end_index
-    ]  # Extract the substring between the occurrences of the character
-    # else:
-    #     if section == "group":
-    #         return ""
-    #     else:
-    #         return None
+    return workspace_name[start_index:end_index]
 
 
 def get_global_number(workspace_name: str) -> int:
@@ -215,34 +207,12 @@ def get_global_number(workspace_name: str) -> int:
 
 def parse_name(workspace_name: str) -> WorkspaceGroupingMetadata:
     result = WorkspaceGroupingMetadata(group="")
-    # =======================my changes===================
-    # Try to parse values my way. If that doesn't work, simply fall back to the old behaviour
-    # regex = r"(.*?):<span>(.*?)</span><span>(.*?)</span><span>(.*?)</span>(.*?)<span(.*?)>(.*?)</span>"
-    # regex = r"(.*?):.*?\u200b(.*?)\u200b.*?\u200b(.*?)\u200b.*?\u200b(.*?)\u200b.*?\u200b(.*?)\u200b"
-    # regex = r"(.*?):.*?\u0009(.*?)\u0009.*?\u0020(.*?)\u0020.*?\u00a0(.*?)\u00a0.*?\u00ad(.*?)\u00ad"
-    # if match := re.search(regex, workspace_name):
-    # try:
-    #     result.global_number = int(match.group(1).strip())
-    #     result.local_number = int(match.group(5).strip())
-    #     result.group = match.group(2).strip()
-    #     result.static_name = match.group(3).strip()
-    #     result.dynamic_name = match.group(4).strip()
-    #     my_logger.my_log("parse_name I'm in")
-    #     my_logger.my_log(result)
-    #     return result
-    # except ValueError:
-    #     pass
     try:
         result.global_number = get_global_number(workspace_name)
         if val := get_section_from_workspace_name(workspace_name, "local_number"):
             result.local_number = int(val) if val else None
-            # try:
-            #     result.local_number = int(val)
-            # except ValueError:
-            #     result.local_number = result.global_number
         else:
             raise ValueError()
-            # result.local_number = result.global_number
         result.group = get_section_from_workspace_name(workspace_name, "group")
         result.static_name = get_section_from_workspace_name(
             workspace_name, "static_name"
@@ -250,18 +220,9 @@ def parse_name(workspace_name: str) -> WorkspaceGroupingMetadata:
         result.dynamic_name = get_section_from_workspace_name(
             workspace_name, "dynamic_name"
         )
-        # my_logger.my_log("parse_name I'm in")
-        # my_logger.my_log(result)
         return result
     except ValueError:
         pass
-
-    # my_logger.my_log("parse_name I'm not in")
-    # my_logger.my_log(workspace_name)
-
-    # Änder einfach den Workspacenamen, so dass es passt
-
-    # old behaviour
     if not is_recognized_name_format(workspace_name):
         result.static_name = sanitize_section_value(workspace_name)
         return result
@@ -353,31 +314,14 @@ def section_sandwich(section_content, section_kind):
     return delimiter + section_content + delimiter
 
 
-# def get_group_string_from_format(group):
-#     group_format_string = "<span foreground='{color}'>{group}</span>"
-#     sandwiched_group = section_sandwich(group.upper(), "group")
-#     if group.upper() in GROUP_COLORS:
-#         return group_format_string.format(
-#             group=sandwiched_group, color=GROUP_COLORS[group.upper()]
-#         )
-#     else:
-#         return section_sandwich("", "group")
-
-
 def create_workspace_name_from_format(ws_meta_data, active=False):
-    # workspace_name_format_string = """{global_number}:{group}<span>{static_name}</span><span>{dynamic_name}</span>{local_number}<span> </span>"""
-    # workspace_group_1_name_format_string = """{global_number}:{group}<span>{static_name}</span><span>{dynamic_name}</span>{local_number}<span> </span>"""
-
-    # workspace_name_format_string = """{global_number}:<span weight='bold' foreground='{group_color}'>{group}:</span><span>{static_name}</span><span>{dynamic_name}</span>{local_number}<span foreground='{workspace_color}'>{glyph}</span>"""
     workspace_name_format_string = """{global_number}:<span foreground='{group_color}'>{group}:</span><span>{static_name}</span><span>{local_number}:</span><span foreground='{workspace_color}'>{glyph} </span>{dynamic_name} """
     workspace_group_1_name_format_string = """{global_number}:{group} <span>{static_name}</span><span>{local_number}:</span><span foreground='{workspace_color}'>{glyph} </span>{dynamic_name} """
-    # workspace_group_1_name_format_string = """{global_number}:<span foreground='{group_color}'>{group}</span><span>{static_name}</span><span>{dynamic_name}</span>{local_number}<span foreground='{workspace_color}'>{glyph}</span>"""
     workspace_name_inactive_format_string = """{global_number}:<span size='1'><span foreground='{group_color}'>{group}:</span><span>{static_name}</span><span>{local_number}:</span><span foreground='{workspace_color}'>{glyph} </span>{dynamic_name} </span>"""
 
     input_values = {
         "global_number": ws_meta_data.global_number,
         "group": section_sandwich(ws_meta_data.group, "group"),
-        # "group": get_group_string_from_format(ws_meta_data.group),
         "static_name": section_sandwich(ws_meta_data.static_name, "static_name"),
         "dynamic_name": section_sandwich(ws_meta_data.dynamic_name, "dynamic_name"),
         "local_number": section_sandwich(ws_meta_data.local_number, "local_number"),
@@ -401,42 +345,13 @@ def create_workspace_name_from_format(ws_meta_data, active=False):
 def create_name(ws_metadata: WorkspaceGroupingMetadata, active=False) -> str:
     assert ws_metadata.global_number is not None
     assert ws_metadata.group is not None
-    # sections = [f"{ws_metadata.global_number}:", ws_metadata.group]
-    # need_prefix_colons = bool(ws_metadata.group)
-
-    # =========================my changes=========================
-    # setattr(ws_metadata, "static_name", "x")
-    # if (
-    #     getattr(ws_metadata, "global_number")
-    #     # and {getattr(ws_metadata, "static_name")}
-    #     # and getattr(ws_metadata, "dynamic_name")
-    #     and getattr(ws_metadata, "local_number")
-    # ):
-    #
     ws_metadata_copy = copy.deepcopy(ws_metadata)
     if not ws_metadata_copy.static_name:
         ws_metadata_copy.static_name = ""
     if not ws_metadata_copy.dynamic_name:
         ws_metadata_copy.dynamic_name = ""
-    # if not ws_metadata_copy.group
-    #     ws_metadata_copy.group = ""
     output = create_workspace_name_from_format(ws_metadata_copy, active)
-    # my_logger.my_log(output)
     return output
-
-    # # old behaviour
-    # my_logger.my_log("create_name I'm not in")
-    # my_logger.my_log(ws_metadata)
-    # for section in ["static_name", "dynamic_name", "local_number"]:
-    #     value = getattr(ws_metadata, section)
-    #     if not value:
-    #         value = ""
-    #     elif need_prefix_colons:
-    #         value = f":{value}"
-    #     else:
-    #         need_prefix_colons = True
-    #     sections.append(str(value))
-    # return SECTIONS_DELIM.join(sections)
 
 
 def compute_global_number(
