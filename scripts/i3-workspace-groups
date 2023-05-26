@@ -261,13 +261,14 @@ def _print_workspaces(controller, args):
     return "\n".join("\t".join(str(e) for e in row) for row in table)
 
 
-def serve(i3_connection, server_addr):
+def serve(i3_connection, server_addr, args=None):
     # Add the imports here to avoid having a negative effect on clients not
     # using the server.
     # pylint: disable-next=import-outside-toplevel
     # import shlex
     # pylint: disable-next=import-outside-toplevel
     import socket
+    import threading
 
     # Make sure the socket does not already exist
     # TODO: lock the socket to avoid multiple servers trying to use the same
@@ -277,6 +278,13 @@ def serve(i3_connection, server_addr):
     except OSError:
         if os.path.exists(server_addr):
             raise
+
+    if args:
+        # Handlers to Events that I want to register while Server is running
+        # Runn in another thread, so it doesn't block
+        eventsThread = threading.Thread(target=register, args=(i3_connection, args))
+        eventsThread.start()
+
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.bind(server_addr)
     sock.listen(1)
@@ -440,7 +448,11 @@ def run_command(i3_connection, args):
         metadata_updates = workspace_names.WorkspaceGroupingMetadata(group=args.group)
         controller.update_focused_workspace(metadata_updates)
     elif args.command == "server":
-        serve(i3_connection, args.server_addr)
+        serve(
+            i3_connection,
+            args.server_addr,
+            args,
+        )
     # Deprecated commands, will be removed in a future release.
     elif args.command == "workspace-back-and-forth":
         logger.warning(
@@ -455,6 +467,129 @@ def run_command(i3_connection, args):
         )
         controller.i3_proxy.send_i3_command("move workspace back_and_forth")
     return ""
+
+
+def on_workspace_event(i3_connection, e, args):
+    workspaces = [e.current]
+    if e.old:
+        workspaces.append(e.old)
+    config = cli.get_config_with_overrides(args)
+    controller = i3_groups_controller.WorkspaceGroupsController(
+        i3_proxy.I3Proxy(i3_connection, False), config
+    )
+    controller.my_workspaces_refresh_dynamic_contents(workspaces)
+
+
+def on_window_event(i3, event, args):
+    config = cli.get_config_with_overrides(args)
+    controller = i3_groups_controller.WorkspaceGroupsController(
+        i3_proxy.I3Proxy(i3, False), config
+    )
+
+    if event.change == "close":
+        focused_workspace = controller.i3_proxy.get_tree().find_focused().workspace()
+        controller.my_workspaces_refresh_dynamic_contents([focused_workspace])
+    else:
+        con = i3.get_tree().find_by_id(event.container.id)
+        while con.type != "workspace" and con.parent is not None:
+            con = con.parent
+        if con.type != "workspace":
+            print(
+                f"{event.container.id} is not the descendant of a workspace container!"
+            )
+            return
+        controller.my_workspaces_refresh_dynamic_contents([con])
+        if event.change == "new":
+            my_new_window_trigger(
+                event.container,
+                controller,
+            )
+
+
+class APP_CLASS_MAPPINGS:
+
+    Chrome = "Google-chrome"
+    Spotify = "Spotify"
+    Discord = "discord"
+    Obsidian = "obsidian"
+    MPV = "mpv"
+    Element = "element"
+
+
+class APP_WORKSPACE_NUMBER_MAPPINGS_FOR_CLASS:
+
+    Chrome = 8
+    Spotify = 12
+    Discord = 13
+    Element = 13
+    Obsidian = 6
+    MPV = 10
+
+
+TITLE_WORKSPACE_MAPPINGS = {"emacs_startup": 1}
+
+
+def my_new_window_trigger(con, controller):
+    id = con.id
+    my_move_container_to_ws_num_by_id_partial = functools.partial(
+        my_move_container_to_ws_num_by_id, id=id, controller=controller
+    )
+    match con.window_title:
+        case "emacs_startup":
+            my_move_container_to_ws_num_by_id_partial(
+                TITLE_WORKSPACE_MAPPINGS["emacs_startup"],
+            )
+        case _:
+            match con.window_class:
+                case APP_CLASS_MAPPINGS.Chrome:
+                    my_move_container_to_ws_num_by_id_partial(
+                        APP_WORKSPACE_NUMBER_MAPPINGS_FOR_CLASS.Chrome,
+                    )
+                case APP_CLASS_MAPPINGS.Spotify:
+                    my_move_container_to_ws_num_by_id_partial(
+                        APP_WORKSPACE_NUMBER_MAPPINGS_FOR_CLASS.Spotify,
+                    )
+                case APP_CLASS_MAPPINGS.Discord:
+                    my_move_container_to_ws_num_by_id_partial(
+                        APP_WORKSPACE_NUMBER_MAPPINGS_FOR_CLASS.Discord,
+                    )
+                case APP_CLASS_MAPPINGS.Element:
+                    my_move_container_to_ws_num_by_id_partial(
+                        APP_WORKSPACE_NUMBER_MAPPINGS_FOR_CLASS.Element,
+                    )
+                case APP_CLASS_MAPPINGS.Obsidian:
+                    my_move_container_to_ws_num_by_id_partial(
+                        APP_WORKSPACE_NUMBER_MAPPINGS_FOR_CLASS.Obsidian,
+                    )
+                case APP_CLASS_MAPPINGS.MPV:
+                    my_move_container_to_ws_num_by_id_partial(
+                        APP_WORKSPACE_NUMBER_MAPPINGS_FOR_CLASS.MPV,
+                    )
+                case _:
+                    pass
+
+
+def my_move_container_to_ws_num_by_id(num, id, controller):
+    target_workspace_name, _ = controller._get_workspace_by_local_number(
+        group=controller._get_group_from_context(
+            i3_groups_controller.NamedGroupContext("")
+        ),
+        local_number=num,
+    )
+    controller.i3_proxy.send_i3_command(
+        f'''[con_id={id}] move to workspace number "{target_workspace_name}"'''
+    )
+
+
+def register(i3, args):
+    import functools
+
+    partial_window_handler = functools.partial(on_window_event, args=args)
+    partial_workspace_handler = functools.partial(on_workspace_event, args=args)
+    i3.on("window::close", partial_window_handler)
+    i3.on("window::new", partial_window_handler)
+    i3.on("workspace::focus", partial_workspace_handler)
+    i3.main()
 
 
 def main():
