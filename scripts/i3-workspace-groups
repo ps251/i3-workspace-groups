@@ -179,6 +179,11 @@ def _create_args_parser() -> cli.ArgumentParserNoExit:
         help="Rename and optionally change the group of the focused workspace",
     )
     _add_rename_workspace_args(rename_workspace_parser)
+    group_step_parser = subparsers.add_parser(
+        "group-step",
+        help="Change Group that are in a hardcoded format in a hardcoded order, up or down ",
+    )
+    group_step_parser.add_argument("direction", choices={"left", "right", "up", "down"})
     assign_workspace_subparser = subparsers.add_parser(
         "assign-workspace-to-group",
         help="Assign the focused workspace to the provided group.",
@@ -439,6 +444,12 @@ def run_command(i3_connection, args):
         controller.move_to_new_workspace(_create_group_context(args))
     elif args.command == "switch-active-group":
         controller.switch_active_group(args.group, args.focused_monitor_only)
+    elif args.command == "group-step":
+        controller.switch_active_group(
+            controller.group_step_calculate_new_group_name(args.direction), None
+        )
+
+        ## Second argument is args.focused_monitor_only
     elif args.command == "rename-workspace":
         metadata_updates = workspace_names.WorkspaceGroupingMetadata(
             group=args.group, static_name=args.name, local_number=args.number
