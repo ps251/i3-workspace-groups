@@ -15,6 +15,8 @@ from i3wsgroups import i3_proxy
 from i3wsgroups import logger
 from i3wsgroups import workspace_names
 
+import functools
+
 _LIST_WORKSPACES_FIELDS = workspace_names.WORKSPACE_NAME_SECTIONS + [
     "window_icons",
     "global_name",
@@ -593,7 +595,6 @@ def my_move_container_to_ws_num_by_id(num, id, controller):
 
 
 def register(i3, args):
-    import functools
 
     partial_window_handler = functools.partial(on_window_event, args=args)
     partial_workspace_handler = functools.partial(on_workspace_event, args=args)
