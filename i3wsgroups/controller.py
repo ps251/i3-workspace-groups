@@ -15,13 +15,14 @@ OrderedWorkspaceGroups = List[Tuple[str, List[i3ipc.Con]]]
 
 logger = logger.logger
 
+GROUP_SECTION_DELIMITER = "."
+
 
 class WorkspaceGroupsError(Exception):
     pass
 
 
 class ActiveGroupContext:
-
     @staticmethod
     def get_group_name(_: i3ipc.Con,
                        group_to_workspaces: GroupToWorkspaces) -> str:
@@ -235,8 +236,47 @@ class WorkspaceGroupsController:
         logger.info('Context group: "%s"', target_group)
         return target_group
 
-    def focus_workspace_number(self, group_context,
-                               target_local_number: int) -> None:
+
+    def group_step_calculate_new_group_name(self, direction):
+        active_group = self.my_get_active_group()
+        if GROUP_SECTION_DELIMITER in active_group:
+            leaf_is_base = False
+        else:
+            leaf_is_base = True
+        base = (
+            active_group[: active_group.rfind(GROUP_SECTION_DELIMITER)]
+            if GROUP_SECTION_DELIMITER in active_group
+            else ""
+        )
+        leaf_name = active_group.split(GROUP_SECTION_DELIMITER)[-1]
+        if direction in ["left", "right"]:
+            increment = 1 if direction == "right" else -1
+            leaf_name = change_leaf_name(leaf_name, increment)
+            if leaf_name == "":
+                return base
+            if leaf_is_base:
+                return leaf_name
+            return base + GROUP_SECTION_DELIMITER + leaf_name
+        else:
+            if direction == "down":
+                return active_group + ".A"
+            elif direction == "up":
+                return base
+
+    def my_get_active_group(self):
+        group_context = ActiveGroupContext()
+        focused_monitor_name = self.i3_proxy.get_focused_monitor_name()
+        group_to_monitor_workspaces = ws_names.get_group_to_workspaces(
+            self.i3_proxy.get_monitor_workspaces(focused_monitor_name)
+        )
+        return group_context.get_group_name(
+            self.get_tree(), group_to_monitor_workspaces
+        )
+
+    def my_workspace_in_active_group_p(self, workspace):
+        return self.my_get_active_group() == ws_names.get_group(workspace)
+
+    def focus_workspace_number(self, group_context, target_local_number: int) -> None:
         target_workspace_name, _ = self._get_workspace_by_local_number(
             group=self._get_group_from_context(group_context),
             local_number=target_local_number)
@@ -316,5 +356,54 @@ class WorkspaceGroupsController:
             free_local_numbers = ws_names.get_lowest_free_local_numbers(
                 1, used_local_numbers)
             metadata.local_number = next(iter(free_local_numbers))
-        self.i3_proxy.rename_workspace(focused_workspace.name,
-                                       self._create_workspace_name(metadata))
+        self.i3_proxy.rename_workspace(
+            focused_workspace.name, self._create_workspace_name(metadata)
+        )
+
+
+def group_name_to_number(column_string):
+    if column_string == "":
+        return -1
+    result = 0
+    for i in range(len(column_string)):
+        char_value = ord(column_string[i]) - ord("A") + 1
+        result = result * 26 + char_value
+    return result - 1
+
+
+def number_to_group_name(number):
+    if number < 0:
+        return ""
+    result = ""
+    number = number + 1
+    while number > 0:
+        char_value = (number - 1) % 26
+        result = chr(char_value + ord("A")) + result
+        number = (number - 1) // 26
+    return result
+
+
+def is_valid_group_name(s):
+    """
+    Check if the given string contains only A-Z characters and has a length smaller than 4.
+    Args:
+    - s: the string to check
+    Returns:
+    - True if the string is valid, False otherwise
+    """
+    if s == "":
+        return True
+    if len(s) > 3:  # if length is 4 or greater, return False
+        return False
+    for c in s:  # check if each character is A-Z
+        if c < "A" or c > "Z":
+            return False
+    return True  # if all checks pass, return True
+
+
+def change_leaf_name(name, increment):
+    if is_valid_group_name(name):
+        group_as_number = group_name_to_number(name)
+        return number_to_group_name(group_as_number + increment)
+    else:
+        return number_to_group_name(0 + increment)
