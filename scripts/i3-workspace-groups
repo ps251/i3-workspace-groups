@@ -504,14 +504,26 @@ def on_window_event(i3, event, args):
 
 
 class APP_CLASS_MAPPINGS:
-    pass
+
+    Chrome = "Google-chrome"
+    Spotify = "Spotify"
+    Discord = "discord"
+    Obsidian = "obsidian"
+    MPV = "mpv"
+    Element = "element"
 
 
 class APP_WORKSPACE_NUMBER_MAPPINGS_FOR_CLASS:
-    pass
+
+    Chrome = 8
+    Spotify = 12
+    Discord = 13
+    Element = 13
+    Obsidian = 6
+    MPV = 10
 
 
-TITLE_WORKSPACE_MAPPINGS = {}
+TITLE_WORKSPACE_MAPPINGS = {"emacs_startup": 1}
 
 
 def my_new_window_trigger(con, controller):
