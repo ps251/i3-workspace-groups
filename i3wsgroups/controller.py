@@ -225,6 +225,19 @@ class WorkspaceGroupsController:
             ws_names.WorkspaceGroupingMetadata(
                 group=group, local_number=local_number)), False
 
+    def my_workspace_dynamic_contents_update(self, workspace):
+        ws_meta_data = ws_names.parse_name(workspace.name)
+        if ws_meta_data.local_number is not None:
+            ws_meta_data.dynamic_name = self.icons_resolver.get_workspace_icons(
+                workspace
+            )
+            new_name = ws_names.create_name(ws_meta_data, True)
+            self.i3_proxy.rename_workspace(workspace.name, new_name)
+
+    def my_workspaces_refresh_dynamic_contents(self, workspaces):
+        for workspace in workspaces:
+            self.my_workspace_dynamic_contents_update(workspace)
+
     def _get_group_from_context(self, group_context):
         group_context = group_context or ActiveGroupContext()
         focused_monitor_name = self.i3_proxy.get_focused_monitor_name()
