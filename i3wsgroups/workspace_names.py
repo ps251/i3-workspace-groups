@@ -205,7 +205,7 @@ def get_global_number(workspace_name: str) -> int:
     return int(workspace_name[:end_index].strip())
 
 
-def parse_name(workspace_name: str) -> WorkspaceGroupingMetadata:
+def parse_name(workspace_name: str, test=False) -> WorkspaceGroupingMetadata | None:
     result = WorkspaceGroupingMetadata(group="")
     try:
         result.global_number = get_global_number(workspace_name)
@@ -222,7 +222,9 @@ def parse_name(workspace_name: str) -> WorkspaceGroupingMetadata:
         )
         return result
     except ValueError:
-        pass
+        # value doesn't conform to my specific scheme
+        if test:
+            return None
     if not is_recognized_name_format(workspace_name):
         result.static_name = sanitize_section_value(workspace_name)
         return result

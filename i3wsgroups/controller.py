@@ -8,6 +8,7 @@ import i3ipc
 from i3wsgroups import i3_proxy, icons, logger
 from i3wsgroups import workspace_names as ws_names
 
+
 # from i3wsgroups.ws_names import *
 
 GroupToWorkspaces = ws_names.GroupToWorkspaces
@@ -74,7 +75,7 @@ class WorkspaceGroupsController:
                 self.config["renumber_workspaces"],
             )
             for workspace, local_number in zip(workspaces, local_numbers):
-                ws_metadata = ws_names.parse_name(workspace.name)
+                ws_metadata = self.ps_parse_maybe_convert_workspace_name(workspace.name)
                 ws_metadata.group = group
                 ws_metadata.local_number = local_number
                 ws_metadata.global_number = ws_names.compute_global_number(
@@ -248,8 +249,55 @@ class WorkspaceGroupsController:
             False,
         )
 
+    def ps_parse_maybe_convert_workspace_name(self, workspace_name):
+        # If the workspace name doesn't conform to my specific scheme, update it to a valid name
+        if workspace_name == ws_names._SCRATCHPAD_WORKSPACE_NAME:
+            return ws_names.parse_name(workspace_name)
+        elif metadata := ws_names.parse_name(workspace_name, test=True):
+            return metadata
+        else:
+            return ws_names.parse_name(self.ps_update_workspace_name(workspace_name))
+
+    def ps_update_workspace_name(self, workspace_name):
+        temp = ws_names.parse_name(workspace_name)
+        metadata = ws_names.WorkspaceGroupingMetadata(
+            global_number=temp.global_number,
+            group=temp.group,
+            local_number=gpt_nth_digit_series(workspace_name, 1),
+        )
+        group_to_all_workspaces = ws_names.get_group_to_workspaces(
+            self.i3_proxy.get_tree(True).workspaces()
+        )
+
+        found_name, exists = self._get_workspace_by_local_number(
+            metadata.group, metadata.local_number
+        )
+        # If other workspace with that local number already exists, find the next possible local number
+        if exists and workspace_name != found_name:
+            used_local_numbers = ws_names.get_used_local_numbers(
+                group_to_all_workspaces[metadata.group]
+            )
+            free_local_numbers = ws_names.get_lowest_free_local_numbers(
+                1, used_local_numbers
+            )
+            metadata.local_number = next(iter(free_local_numbers))
+        if metadata.global_number is None:
+            monitor_name = self.i3_proxy.ps_get_monitor_name(
+                self.i3_proxy.ps_find_workspace_by_name(workspace_name)
+            )
+            metadata.global_number = ws_names.compute_global_number(
+                monitor_index=self.i3_proxy.get_monitor_index(monitor_name),
+                group_index=0,
+                local_number=metadata.local_number,
+            )
+        if metadata.group is None:
+            metadata.group = ""
+        new_name = ws_names.create_name(metadata, active=True)
+        self.i3_proxy.rename_workspace(workspace_name, new_name)
+        return new_name
+
     def my_workspace_dynamic_contents_update(self, workspace):
-        ws_meta_data = ws_names.parse_name(workspace.name)
+        ws_meta_data = self.ps_parse_maybe_convert_workspace_name(workspace.name)
         if ws_meta_data.local_number is not None:
             ws_meta_data.dynamic_name = self.icons_resolver.get_workspace_icons(
                 workspace
@@ -382,7 +430,7 @@ class WorkspaceGroupsController:
                 f'Invalid group name provided: "{metadata_updates.group}"'
             )
         focused_workspace = self.get_tree().find_focused().workspace()
-        metadata = ws_names.parse_name(focused_workspace.name)
+        metadata = self.ps_parse_maybe_convert_workspace_name(focused_workspace.name)
         for section in ["group", "local_number", "static_name"]:
             value = getattr(metadata_updates, section)
             if value is not None:
@@ -458,3 +506,24 @@ def change_leaf_name(name, increment):
         return number_to_group_name(group_as_number + increment)
     else:
         return number_to_group_name(0 + increment)
+
+
+def gpt_nth_digit_series(s, n):
+    digit_series = []
+    current_series = ""
+
+    for char in s:
+        if char.isdigit():
+            current_series += char
+        else:
+            if current_series:
+                digit_series.append(int(current_series))
+                current_series = ""
+
+    if current_series:
+        digit_series.append(int(current_series))
+
+    if 0 < n <= len(digit_series):
+        return digit_series[n - 1]
+    else:
+        return None

@@ -504,6 +504,9 @@ def on_window_event(i3, event, args):
         controller.my_workspaces_refresh_dynamic_contents([focused_workspace])
     else:
         con = i3.get_tree().find_by_id(event.container.id)
+        if con is None:
+            print(f"{event.container.id} not found")
+            return
         while con.type != "workspace" and con.parent is not None:
             con = con.parent
         if con.type != "workspace":
